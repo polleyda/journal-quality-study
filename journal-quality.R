@@ -47,12 +47,28 @@ data$doaj_query <- ifelse(is.na(data$issn), data$issn, as.character(paste0("http
 # DOAJ Search function
 doaj.search <- function(x){
   doaj.search <- GET(x)
-  parsed.content <- content(doaj.search, as = "text", encoding = "UTF-8")
-  results <- fromJSON(parsed.content)
-  journal <- results[[4]] %>% as.data.frame()
+  parsed <- content(doaj.search, as = "parsed", encoding = "UTF-8")
+  journal <- if(length(parsed$results) != 0){
+    cbind.data.frame(parsed$results[[1]]$bibjson$title, 
+                     parsed$results[[1]]$bibjson$plagiarism_detection$detection, 
+                     parsed$results[[1]]$bibjson$plagiarism_detection$url, 
+                     parsed$results[[1]]$bibjson$apc_url, 
+                     parsed$results[[1]]$bibjson$link[[1]]$url)
+  }
+  else{
+    return("NA")
+  }
   return(journal)
 }
 
 # Create a vector that holds DOAJ query strings
 query.vector <- c(data$doaj_query)
+
+# Remove NA values from query vector
+query.vector <- query.vector[which(data$doaj_query != "NA")]
+
+# Apply DOAJ Search function to query vector
 doaj.results <- lapply(query.vector, doaj.search)
+
+#combine list of dataframes into one dataframe
+doaj.results <- do.call("rbind", doaj.results)
