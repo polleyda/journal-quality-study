@@ -1,4 +1,4 @@
-## Look up journals in SHERPA/RoMEO and DOAJ APIs
+## Journal Quality
 
 # install.packages("dplyr")
 # install.packages("httr")
@@ -6,25 +6,24 @@
 # install.packages("magrittr")
 # install.packages("XML")
 
+ptm <- proc.time()
+
 # Set working directory
 setwd("~/Desktop/journal-quality-study")
 
 # Load data w/ journal titles formatted as API query strings
-citation_data <- read.csv("sample-data.csv", strip.white = TRUE, stringsAsFactors = FALSE, na.strings = c("","NA"))
+citation_data <- read.csv("Journals-Only-Quality-2017-analysis-REDACTED-20180430.csv", strip.white = TRUE, stringsAsFactors = FALSE, na.strings = c("","NA"))
 
-# initialize API URL
-url <- "http://www.sherpa.ac.uk/romeo/api29.php"
-
-# Query function
+# Search SHERPA/RoMEO API 
 sherpa_search <- function(x){
-  sherpa_search <- modify_url(url, query = x) %>% GET()
+  sherpa_search <- GET(x)
   parsed_content <- content(sherpa_search, as = "parsed", encoding = "ISO-8859-1") %>% xmlParse() %>% xmlToList()
   journal <- parsed_content[[2]] %>% as.data.frame()
   return(journal)
 }
 
 # Create and de-duplicate a vector that holds SHERPA query strings
-sherpa_query_vector <- c(citation_data$journal_query) %>% unique()
+sherpa_query_vector <- c(citation_data$sherpa_query) %>% unique()
 
 # Apply sherpa_search() to list of journal titles (formatted as API query strings)
 sherpa_results <- lapply(sherpa_query_vector, sherpa_search)
@@ -70,7 +69,18 @@ doaj_query_vector <- doaj_query_vector[which(data$doaj_query != "NA")]
 doaj_results <- lapply(doaj_query_vector, doaj_search)
 
 # Remove NAs from list
-doaj_results <- doaj_results[sapply(doaj_results, function(x) dim(x)[1]) > 0]
+doaj_results <- doaj_results[which(doaj_results != "NA")]
 
-#combine list of dataframes into one dataframe
+# Combine list of dataframes into one dataframe
 doaj_results <- do.call("rbind", doaj_results)
+
+# Rename columns
+colnames(doaj_results) <- c("journal_controlled", "plagiarism_detection_policy", "plagiarism_detection_policy_url", "apc_url", "journal_url")
+
+# Combine results of DOAJ search with data by journal title
+data <- left_join(data,doaj_results, by = "journal_controlled")
+
+# Write CSV file of results
+write.csv(data, "journal-quality-results.csv", row.names = FALSE)
+
+proc.time() - ptm
