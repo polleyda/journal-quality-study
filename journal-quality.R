@@ -6,22 +6,27 @@
 # install.packages("magrittr")
 # install.packages("XML")
 
-ptm <- proc.time()
-
 # Set working directory
 setwd("~/Desktop/journal-quality-study")
 
 # Load data w/ journal titles formatted as API query strings
-citation_data <- read.csv("Journals-Only-Quality-2017-analysis-REDACTED-20180430.csv", strip.white = TRUE, stringsAsFactors = FALSE, na.strings = c("","NA"))
+citation_data <- read.csv("sample-data.csv", strip.white = TRUE, stringsAsFactors = FALSE, na.strings = c("","NA"))
 
 # Search SHERPA/RoMEO API 
 sherpa_search <- function(x){
   sherpa_search <- GET(x)
   parsed_content <- content(sherpa_search, as = "parsed", encoding = "ISO-8859-1") %>% xmlParse() %>% xmlToList()
+  if(length(parsed_content[[2]]) > 1){
+    journal <- cbind.data.frame(parsed_content[[2]]$journal[[1]],
+                                parsed_content[[2]]$journal[[2]],
+                                parsed_content[[2]]$journal[[3]],
+                                parsed_content[[2]]$journal[[4]])
+    colnames(journal) <- c("journal.jtitle", "journal.issn", "journal.zetocpub", "journal.romeopub")
+  }else{
   journal <- parsed_content[[2]] %>% as.data.frame()
+  }
   return(journal)
 }
-
 # Create and de-duplicate a vector that holds SHERPA query strings
 sherpa_query_vector <- c(citation_data$sherpa_query) %>% unique()
 
@@ -82,5 +87,3 @@ data <- left_join(data,doaj_results, by = "journal_controlled")
 
 # Write CSV file of results
 write.csv(data, "journal-quality-results.csv", row.names = FALSE)
-
-proc.time() - ptm
