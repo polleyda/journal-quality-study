@@ -13,7 +13,7 @@ setwd("~/Desktop/journal-quality-study")
 ptm <- proc.time()
 
 # Load data w/ journal titles formatted as API query strings
-citation_data <- read.csv("sample-data.csv", strip.white = TRUE, stringsAsFactors = FALSE, na.strings = c("","NA"))
+citation_data <- read.csv("Journals-Only-Quality-2017-analysis-REDACTED-20180430.csv", strip.white = TRUE, stringsAsFactors = FALSE, na.strings = c("","NA"))
 
 # Takes care of null values in lists returned by SHERPA/RoMEO API
 # https://stackoverflow.com/questions/22870198/is-there-a-more-efficient-way-to-replace-null-with-na-in-a-list
@@ -27,7 +27,7 @@ sherpa_search <- function(x){
   sherpa_search <- GET(x)
   parsed_content <- content(sherpa_search, as = "parsed", encoding = "ISO-8859-1") %>% xmlParse() %>% xmlToList()
   if(length(parsed_content[[2]]) > 1){
-    return(c(x,"Multiple Matches"))
+    journal <- c(x,"Multiple Matches")
   }else{
   journal <- parsed_content[[2]]
   journal <- lapply(journal, nullToNA) %>% as.data.frame()
@@ -42,16 +42,20 @@ sherpa_query_vector <- c(citation_data$sherpa_query) %>% unique()
 sherpa_results <- lapply(sherpa_query_vector, sherpa_search)
 
 # Build the multiple matches in SHERPA into dataframe
-multiple_matches <- sherpa_results[which()]
+multiple_matches <- sherpa_results[grep("GFuZz2ehaks", sherpa_results)]
+multiple_matches <- do.call("rbind", multiple_matches) %>% as.data.frame()
+colnames(multiple_matches) <- c("sherpa_query", "multiple_matches")
 
 # Combine list of dataframes into one dataframe
+sherpa_results <- sherpa_results[grep("journal.jtitle", sherpa_results)]
 sherpa_results <- do.call("rbind", sherpa_results)
 
 # Rename the columns of sherpa.results dataframe to facilite a join
 colnames(sherpa_results) <- c("journal_controlled", "issn", "zetoc_pub", "romeo_pub")
 
 # Combine citation_data and sherpa_results based on journal_controlled
-data <- left_join(citation_data,sherpa_results, by = "journal_controlled")
+data <- left_join(citation_data, sherpa_results, by = "journal_controlled")
+data <- left_join(data, multiple_matches, by = "sherpa_query")
 
 # Copy the ISSN from citation_data into the data$issn column, if none are found in SHERPA
 data$issn <- ifelse(is.na(data$issn), data$issn_dm, as.character(data$issn))
@@ -96,7 +100,8 @@ colnames(doaj_results) <- c("journal_controlled", "plagiarism_detection_policy",
 # Combine results of DOAJ search with data by journal title
 data <- left_join(data,doaj_results, by = "journal_controlled")
 
+# Deduplicate data based on id
+data <- data[!duplicated(data$id),]
+
 # Write CSV file of results
 write.csv(data, "journal-quality-results.csv", row.names = FALSE)
-
-proc.time() - ptm
